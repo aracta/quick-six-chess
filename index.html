@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>六子对战棋</title>
+<style>
+.chess{
+    display: block;
+    margin: 50px auto;
+    box-shadow: -2px -2px 2px #EFEFEF, 5px 5px 5px #B9B9B9;
+}
+
+</style>
+</head>
+<body>
+    <canvas id="chess" width="360px" height="360px" class="chess">
+        您的浏览器不支持canvas，请使用其他浏览器或极速模式。
+    </canvas>
+<script>
+var chess;              //canvas对象
+var downChess;          //audio对象
+var CHESS_WIDTH;      //棋盘的高度
+var CHESS_HEIGTH;    //棋盘的宽度
+var over = false;   //表示是否有人赢了
+var chessPen;
+var canMove; //此步骤可移动的棋子颜色，1为黑，2为白
+var isSelected=0; //是否已经选中了棋子
+var selectedChess={}; //存储当前已经选中的棋子坐标
+var LINE;  //一共有棋盘有多少行多少列
+var LINTTOPADDIN;  //棋盘的线距离棋盘左右上下的距离
+var LINE_SIZEPX;  //棋盘每条线的间隔
+var isBlack = true; //用来存储下一个棋子的颜色，true为黑棋，默认为黑棋先下
+var chessMap = [];  //存储棋盘的棋子，0代表当前位置没有棋子，1代表黑棋，2代表白棋
+var wins = [];  //赢法数组      [x][y][k]   x y 代表棋盘上的一个点 k代表第几种赢法
+var myWin = []; //我方的赢法统计数组
+var comWin = [];//计算机方的赢法统计数组
+var total = new Array();
+total[1] = total[2] = 6;
+
+window.onload = function () {
+    infoStart();
+}
+var infoStart = function(){
+    chess = document.getElementById("chess");
+    downChess = document.getElementById("downChess");
+    chessPen = chess.getContext("2d");
+    chessPen.strokeStyle = "#B9B9B9";
+    CHESS_WIDTH = chess.width;      //棋盘的高度
+    CHESS_HEIGTH = chess.height;    //棋盘的宽度
+    LINE = 4;  //一共有棋盘有多少行多少列
+    LINTTOPADDIN = 20;  //棋盘的线距离棋盘左右上下的距离
+    LINE_SIZEPX = 107;  //棋盘每条线的间隔
+    drawCheckerBoard(); //初始化棋盘
+    reloadBoard();      //初始化棋子
+    //棋盘单击事件
+    chess.onclick = function(e){
+        //如果已经有人获胜，就不处理
+        if(over){
+            return;
+        }
+        var x = Math.floor(e.offsetX / LINE_SIZEPX);
+        var y = Math.floor(e.offsetY / LINE_SIZEPX);
+        /*
+        if(chessMap[x][y] == 0){
+            drawOneChess(x, y, isBlack);
+            chessMap[x][y] = 1;    //黑棋
+        }else{
+            return;
+        }
+        */
+        //只有黑棋才能选中黑棋，白棋才能选中白棋
+        canMove = returnColor(isBlack);
+        //判断是否已经选中棋子，如果是，则直接移动该棋子
+        if(isSelected){
+          //move selectedChess
+          //判断当前位置是否有棋子
+          if( chessMap[x][y]===canMove ){ //己方的棋子，则转换selectedChess
+            if(selectedChess.x != x || selectedChess.y != y ){
+              //消除前一个选中棋子的状态
+              drawOneChess(selectedChess.x, selectedChess.y, isBlack);
+              selectedChess.x = x;
+              selectedChess.y = y;
+              //设置当前棋子的状态
+              selectChess(selectedChess,isBlack);
+            }
+            return;
+          }else if( chessMap[x][y] !== 0 &&  chessMap[x][y] !== canMove ){ //对方的棋子
+            return;
+          }else if(Math.abs(x-selectedChess.x) != Math.abs(y-selectedChess.y) && ( Math.abs(x-selectedChess.x)==1 || Math.abs(y-selectedChess.y)==1 ) ){ //空位，且处于可以直接移动一步的范畴内
+            //消除被选中棋子
+            drawOneChess(selectedChess.x, selectedChess.y, -1);
+            chessMap[selectedChess.x][selectedChess.y] = 0;
+            drawOneChess(x, y, isBlack);
+            chessMap[x][y] = canMove;
+            //消灭对方棋子
+            wipeOut(x,y,isBlack);
+            isSelected = false;
+          }else{ //空位，且超出可以移动一步的范畴
+            return;
+          }
+        }else{
+          //select chess
+          if(chessMap[x][y] != canMove){
+            //alert("请不要选中对方棋子！");
+            return;
+          }else{
+            selectedChess.x = x;
+            selectedChess.y = y;
+            selectChess(selectedChess,isBlack);
+            isSelected = true;
+            return;
+          }
+        }
+        //遍历某方棋子个数为0或1，则判定为对方胜利
+        if(total[1]<=0){
+			alert("白棋赢了！");
+			over = true;
+		}else if(total[2]<=0){
+			alert("黑棋赢了！");
+			over = true;
+		}
+        //如果还没有结束，我们让计算机下棋
+        if(!over){
+            isBlack = !isBlack;    //下一个棋
+            //computerAI();
+        }
+    };
+}
+
+//初始化棋子
+var reloadBoard = function(){
+    for(var i=0;i<LINE;i++){
+        chessMap[i] = [];
+        for(var j = 0;j<LINE;j++){
+          if(i===0){
+            chessMap[i][j] = 1;
+            //7ckf
+            drawOneChess(i,j,1);
+          }else if(i===(LINE-1)){
+            chessMap[i][j] = 2;
+            //7ckf
+            drawOneChess(i,j,0);
+          }else if(j===0 || j===(LINE-1)){
+            if(i===1){
+              chessMap[i][j] = 1;
+              //7ckf
+              drawOneChess(i,j,1);
+            }else if(i===(LINE-2)){
+              chessMap[i][j] = 2;
+              //7ckf
+              drawOneChess(i,j,0);
+            }
+          }else{
+            chessMap[i][j] = 0;
+          }
+        }
+    }
+}
+
+//绘制棋盘
+var drawCheckerBoard = function () {
+    for (var i = 0; i < LINE; i++) {
+        chessPen.beginPath();
+        chessPen.moveTo(LINTTOPADDIN + i * LINE_SIZEPX, 0 + LINTTOPADDIN );
+        chessPen.lineTo(LINTTOPADDIN + i * LINE_SIZEPX, CHESS_HEIGTH - LINTTOPADDIN );
+        chessPen.stroke();
+
+        chessPen.beginPath();
+        chessPen.moveTo(0 + LINTTOPADDIN, LINTTOPADDIN + i * LINE_SIZEPX);
+        chessPen.lineTo(CHESS_WIDTH - LINTTOPADDIN, LINTTOPADDIN + i * LINE_SIZEPX);
+        chessPen.stroke();
+    }
+};
+
+//绘制棋子
+var drawOneChess = function (x, y, isBlack, isSelected) {
+    //console.log(x + "," + y);
+    //downChess.load();       //每次单击重新载入音频
+    //downChess.play();       //单击播放音频
+    chessPen.beginPath();
+    chessPen.arc(LINTTOPADDIN + x * LINE_SIZEPX, LINTTOPADDIN + y * LINE_SIZEPX, 13, 0, 2 * Math.PI);
+    chessPen.closePath();
+    var gradient = chessPen.createRadialGradient(LINTTOPADDIN + x * LINE_SIZEPX + 2, LINTTOPADDIN + y * LINE_SIZEPX - 2, 13, LINTTOPADDIN + x * LINE_SIZEPX + 2, LINTTOPADDIN + y * LINE_SIZEPX - 2, 0);
+    if(isBlack===-1){ //7ckf 销毁棋子
+        //console.log(`销毁棋子${x},${y}`)
+        gradient.addColorStop(0,"#fff");
+        gradient.addColorStop(1,"#fff");
+    }else if(isBlack){
+        gradient.addColorStop(0,"#0A0A0A");
+        if(isSelected==1)
+          gradient.addColorStop(0.1,"red");
+        gradient.addColorStop(1,"#636766");
+    }else{
+        gradient.addColorStop(0,"#D1D1D1");
+        if(isSelected==1)
+          gradient.addColorStop(0.1,"red");
+        gradient.addColorStop(1,"#F9F9F9");
+    }
+    chessPen.fillStyle = gradient;
+    chessPen.fill();
+};
+var returnColor = function(isBlack){
+  if(isBlack){
+    return 1; //黑
+  }else{
+    return 2; //白
+  }
+}
+//选中棋子
+var selectChess = function(o, isBlack){
+  drawOneChess(o.x, o.y, isBlack, 1);
+};
+//消灭棋子 参数x,y为刚刚移动的棋子,isBlack为颜色
+var wipeOut = function(x,y,isBlack){
+  //规则：移动后，如果在横向或纵向上，形成本方棋子:对方棋子=2:1，且中间无间隔（本方棋子相连，对方棋子紧挨本方棋子），则对方棋子被消灭；可以在纵横双向上同时歼灭对方棋子
+  var selfColor = returnColor(isBlack);//本方棋子颜色
+  var selfColorCount = 0; //本方连续棋子颜色个数
+  var chessCount = 0; //双方连续棋子个数
+  var wipeX,wipeY; //被消灭的对方棋子的x，y坐标
+  //一、同一个x方向上:
+  for(var i=0;i<LINE;i++){
+    if(chessMap[x][i]){
+      chessCount ++; //如果是连续的，则个数+1
+      if(chessMap[x][i]==selfColor){
+			selfColorCount ++; //如果是连续本方棋子，则个数+1
+      }else{
+		if(selfColorCount != 2)
+			selfColorCount = 0;//如果存在断档，则重新从0计数
+        wipeY = i;//对方棋子的Y坐标
+      }
+    }else{
+      if(chessCount != 3)
+		chessCount = 0;//如果中间中断，则重新从0计数
+    }
+  }
+  if(selfColorCount==2 && chessCount==3){//双方棋子连续为3，本方棋子连续为2
+    //消除对方棋子
+	chessMap[x][wipeY] = 0;
+	//对方棋子个数--
+	total[returnColor(!isBlack)] -- ;
+    drawOneChess(x, wipeY, -1);
+  }
+  selfColorCount = chessCount = 0;//重置
+  //二、同一个y方向上:
+  for(var j=0;j<LINE;j++){
+    if(chessMap[j][y]){
+      chessCount ++; //如果是连续的，则个数+1
+      if(chessMap[j][y]==selfColor){
+			selfColorCount ++; //如果是连续本方棋子，则个数+1
+      }else{
+		if(selfColorCount != 2)
+			selfColorCount = 0;//如果存在断档，则重新从0计数
+        wipeX = j;//对方棋子的Y坐标
+      }
+    }else{
+      if(chessCount != 3)
+		chessCount = 0;//如果中间中断，则重新从0计数
+    }
+  }
+  if(selfColorCount==2 && chessCount==3){//双方棋子连续为3，本方棋子连续为2
+    //消除对方棋子
+	chessMap[wipeX][y] = 0;
+	//对方棋子个数--
+	total[returnColor(!isBlack)] -- ;
+    drawOneChess(wipeX, y, -1);
+  }
+}
+
+</script>
+</body>
+</html>
